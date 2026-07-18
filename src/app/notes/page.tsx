@@ -14,6 +14,8 @@ const COLUMNS = [
 
 type QuickNote = { id: string; column_name: string; text: string };
 
+export const dynamic = "force-dynamic";
+
 export default async function NotesPage() {
   const project = await getOrCreateProject();
   const notes: QuickNote[] = await listQuickNotes(project.id);

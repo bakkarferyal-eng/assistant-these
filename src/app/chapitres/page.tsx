@@ -20,6 +20,8 @@ type ChapterWithProgress = {
   points: { id: string; text: string }[];
 };
 
+export const dynamic = "force-dynamic";
+
 export default async function ChapitresPage() {
   const project = await getOrCreateProject();
   const chapters: ChapterWithProgress[] = await listChaptersWithProgress(

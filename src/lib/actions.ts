@@ -141,7 +141,12 @@ export async function listChaptersWithProgress(projectId: string) {
   );
 
   return chapters.map(
-    (chapter: { id: string; points: unknown[] }) => {
+    (chapter: {
+      id: string;
+      name: string;
+      status: string;
+      points: { id: string; text: string }[];
+    }) => {
       const data = dataByChapter.get(chapter.id) as
         | { sequence: string | null; writing: string | null }
         | undefined;

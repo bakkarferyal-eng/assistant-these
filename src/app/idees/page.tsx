@@ -21,6 +21,8 @@ type Idea = {
 
 type Chapter = { id: string; name: string };
 
+export const dynamic = "force-dynamic";
+
 export default async function IdeesPage() {
   const project = await getOrCreateProject();
   const ideas: Idea[] = await listIdeas(project.id);

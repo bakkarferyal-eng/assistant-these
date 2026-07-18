@@ -24,6 +24,8 @@ function todayStr() {
   return new Date().toISOString().slice(0, 10);
 }
 
+export const dynamic = "force-dynamic";
+
 export default async function TodayPage() {
   const project = await getOrCreateProject();
   const daily = await getDaily(project.id);

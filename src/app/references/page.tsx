@@ -8,6 +8,8 @@ import {
 
 type Reference = { id: string; raw: string; formatted: string | null };
 
+export const dynamic = "force-dynamic";
+
 export default async function ReferencesPage() {
   const project = await getOrCreateProject();
   const references: Reference[] = await listReferences(project.id);

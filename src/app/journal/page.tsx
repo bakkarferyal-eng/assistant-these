@@ -12,6 +12,8 @@ function formatDate(isoDate: string): string {
   return `${day}/${month}/${year}`;
 }
 
+export const dynamic = "force-dynamic";
+
 export default async function JournalPage() {
   const project = await getOrCreateProject();
   const entries: JournalEntry[] = await listJournal(project.id);
