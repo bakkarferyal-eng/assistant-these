@@ -27,40 +27,20 @@ export async function GET() {
 
     const buffer = Buffer.from(await fileData.arrayBuffer());
 
-    const [{ PDFParse }, path, { pathToFileURL }, fs] = await Promise.all([
-      import("pdf-parse"),
-      import("node:path"),
-      import("node:url"),
-      import("node:fs"),
-    ]);
+    const { extractText, getDocumentProxy } = await import("unpdf");
+    const pdf = await getDocumentProxy(new Uint8Array(buffer));
+    const result = await extractText(pdf, { mergePages: true });
 
-    const workerPath = path.join(
-      process.cwd(),
-      "node_modules/pdf-parse/dist/worker/pdf.worker.mjs"
-    );
-    const workerExists = fs.existsSync(workerPath);
-
-    PDFParse.setWorker(pathToFileURL(workerPath).href);
-
-    const parser = new PDFParse({ data: buffer });
-    try {
-      const result = await parser.getText();
-      return NextResponse.json({
-        success: true,
-        filename: upload.filename,
-        cwd: process.cwd(),
-        workerPath,
-        workerExists,
-        textLength: result.text.length,
-        preview: result.text.slice(0, 200),
-      });
-    } finally {
-      await parser.destroy();
-    }
+    return NextResponse.json({
+      success: true,
+      filename: upload.filename,
+      totalPages: result.totalPages,
+      textLength: result.text.length,
+      preview: result.text.slice(0, 200),
+    });
   } catch (err) {
     return NextResponse.json({
       success: false,
-      cwd: process.cwd(),
       error: err instanceof Error ? err.message : String(err),
       stack: err instanceof Error ? err.stack : undefined,
     });

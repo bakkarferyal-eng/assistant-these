@@ -93,14 +93,18 @@ export default async function ChapterPage({
         </div>
       )}
 
-      <details className="mb-6 text-sm">
-        <summary className="cursor-pointer" style={{ color: "var(--ink-soft)" }}>
-          Limite de pages et style attendu pour ce chapitre
-        </summary>
-        <form
-          action={updateChapterDetailsAction}
-          className="card p-3 mt-2 space-y-2"
+      <div className="card p-4 mb-6" style={{ borderLeft: "3px solid var(--ink-soft)" }}>
+        <span
+          className="mono text-xs uppercase tracking-wide"
+          style={{ color: "var(--ink-soft)" }}
         >
+          Limite de pages & façon d&apos;écrire attendue
+        </span>
+        <p className="text-xs mt-1 mb-2" style={{ color: "var(--ink-soft)" }}>
+          Lu par Séquencer, Exemple et Corriger pour ce chapitre — ce qu&apos;il
+          faut développer, ce qu&apos;il faut éviter, le ton attendu.
+        </p>
+        <form action={updateChapterDetailsAction} className="space-y-2">
           <input type="hidden" name="id" value={chapter.id} />
           <div>
             <label className="block text-xs mb-1" style={{ color: "var(--ink-soft)" }}>
@@ -121,34 +125,15 @@ export default async function ChapterPage({
             <textarea
               name="style_note"
               defaultValue={chapter.style_note ?? ""}
-              rows={2}
-              placeholder="Ex: partir du général vers le spécifique, ton accessible..."
+              rows={3}
+              placeholder="Ex: partir du général vers le spécifique, ton accessible, ce qu'il faut/ne faut pas développer ici..."
             />
           </div>
           <button type="submit" className="btn-ghost text-xs">
             Enregistrer
           </button>
         </form>
-      </details>
-
-      {chapter.style_note && (
-        <div
-          className="mb-4 p-3 text-sm"
-          style={{
-            background: "var(--surface-2)",
-            borderRadius: 10,
-            borderLeft: "3px solid var(--ink-soft)",
-          }}
-        >
-          <span
-            className="mono text-xs uppercase tracking-wide"
-            style={{ color: "var(--ink-soft)" }}
-          >
-            Façon d&apos;écrire attendue
-          </span>
-          <p className="mt-1">{chapter.style_note}</p>
-        </div>
-      )}
+      </div>
 
       {linkedIdeas.length > 0 && (
         <section className="mb-6">

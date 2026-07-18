@@ -2,11 +2,14 @@ import {
   getOrCreateProject,
   listIdeas,
   listChapters,
+  listIdeaGroups,
   createIdeaAction,
   deleteIdeaAction,
   assignIdeaAction,
   suggestChapterAction,
   ideaFeedbackAction,
+  sequenceIdeasAction,
+  deleteIdeaGroupAction,
 } from "@/lib/actions";
 
 type Idea = {
@@ -21,12 +24,19 @@ type Idea = {
 
 type Chapter = { id: string; name: string };
 
+type IdeaGroup = {
+  id: string;
+  idea_texts: string[];
+  reasoning: string | null;
+};
+
 export const dynamic = "force-dynamic";
 
 export default async function IdeesPage() {
   const project = await getOrCreateProject();
   const ideas: Idea[] = await listIdeas(project.id);
   const chapters: Chapter[] = await listChapters(project.id);
+  const ideaGroups: IdeaGroup[] = await listIdeaGroups(project.id);
 
   const pending = ideas.filter((i) => i.status !== "placed");
   const placed = ideas.filter((i) => i.status === "placed");
@@ -61,17 +71,68 @@ export default async function IdeesPage() {
         </form>
       </div>
 
-      {pending.length > 0 && (
+      {ideaGroups.length > 0 && (
         <section>
           <span
             className="mono text-xs uppercase tracking-wide"
             style={{ color: "var(--ink-soft)" }}
           >
-            En attente ({pending.length})
+            Groupes organisés
           </span>
           <div className="space-y-2 mt-2">
+            {ideaGroups.map((group) => (
+              <div key={group.id} className="card p-4" style={{ borderTop: "3px solid var(--accent)" }}>
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <ul className="text-sm list-disc pl-4 space-y-0.5">
+                    {group.idea_texts.map((text, i) => (
+                      <li key={i}>{text}</li>
+                    ))}
+                  </ul>
+                  <form action={deleteIdeaGroupAction}>
+                    <input type="hidden" name="id" value={group.id} />
+                    <button type="submit" className="btn-ghost px-2 py-1 text-xs shrink-0">
+                      Supprimer
+                    </button>
+                  </form>
+                </div>
+                {group.reasoning && (
+                  <div
+                    className="text-sm whitespace-pre-wrap pt-2"
+                    style={{ borderTop: "1px dashed var(--line)", lineHeight: 1.6 }}
+                  >
+                    {group.reasoning}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {pending.length > 0 && (
+        <section>
+          <div className="flex items-center justify-between mb-2">
+            <span
+              className="mono text-xs uppercase tracking-wide"
+              style={{ color: "var(--ink-soft)" }}
+            >
+              En attente ({pending.length})
+            </span>
+            <form action={sequenceIdeasAction} id="idea-select-form">
+              <input type="hidden" name="project_id" value={project.id} />
+              <button type="submit" className="btn-ghost text-xs">
+                Organiser la sélection
+              </button>
+            </form>
+          </div>
+          <p className="text-xs mb-2" style={{ color: "var(--ink-soft)" }}>
+            Coche au moins 2 idées ci-dessous pour demander à l&apos;IA de les
+            organiser ensemble, avant même de savoir dans quel chapitre elles
+            iront.
+          </p>
+          <div className="space-y-2">
             {pending.map((idea) => (
-              <IdeaCard key={idea.id} idea={idea} chapters={chapters} />
+              <IdeaCard key={idea.id} idea={idea} chapters={chapters} selectable />
             ))}
           </div>
         </section>
@@ -103,16 +164,35 @@ export default async function IdeesPage() {
   );
 }
 
-function IdeaCard({ idea, chapters }: { idea: Idea; chapters: Chapter[] }) {
+function IdeaCard({
+  idea,
+  chapters,
+  selectable,
+}: {
+  idea: Idea;
+  chapters: Chapter[];
+  selectable?: boolean;
+}) {
   const chapter = chapters.find((c) => c.id === idea.chapter_id);
   const suggested = chapters.find((c) => c.id === idea.suggested_chapter_id);
 
   return (
     <div className="idea-card">
       <div className="flex items-start justify-between gap-2">
-        <span className={`badge ${chapter ? "badge-placed" : "badge-pending"}`}>
-          {chapter ? chapter.name : "à placer"}
-        </span>
+        <div className="flex items-start gap-2">
+          {selectable && (
+            <input
+              type="checkbox"
+              name="idea_ids"
+              value={idea.id}
+              form="idea-select-form"
+              className="mt-1"
+            />
+          )}
+          <span className={`badge ${chapter ? "badge-placed" : "badge-pending"}`}>
+            {chapter ? chapter.name : "à placer"}
+          </span>
+        </div>
         <form action={deleteIdeaAction}>
           <input type="hidden" name="id" value={idea.id} />
           <button type="submit" className="btn-ghost px-2 py-1 text-xs">

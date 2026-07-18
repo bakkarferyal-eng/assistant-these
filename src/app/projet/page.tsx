@@ -6,6 +6,9 @@ import {
   listUploads,
   uploadFileAction,
   deleteUploadAction,
+  listFileAnalyses,
+  analyzeFileAction,
+  deleteFileAnalysisAction,
 } from "@/lib/actions";
 
 export const dynamic = "force-dynamic";
@@ -13,6 +16,7 @@ export const dynamic = "force-dynamic";
 export default async function ProjetPage() {
   const project = await getOrCreateProject();
   const uploads = await listUploads(project.id);
+  const analyses = await listFileAnalyses(project.id);
 
   return (
     <div className="space-y-4">
@@ -195,6 +199,79 @@ export default async function ProjetPage() {
           {uploads.length === 0 && (
             <p className="text-sm" style={{ color: "var(--ink-soft)" }}>
               Aucun document pour l&apos;instant.
+            </p>
+          )}
+        </div>
+      </div>
+
+      <div className="card p-4">
+        <h2 className="disp text-lg font-medium mb-1">Analyser un fichier</h2>
+        <p className="text-xs mb-3" style={{ color: "var(--ink-soft)" }}>
+          Un graphique, un tableau, une image de résultat — envoie le fichier
+          et dis à l&apos;IA quoi en faire (le décrire, en extraire les
+          valeurs, répondre à une question dessus...). Le résultat s&apos;affiche
+          en dessous, à copier toi-même où tu veux (ex: dans un chapitre).
+        </p>
+
+        <form
+          action={analyzeFileAction}
+          encType="multipart/form-data"
+          className="space-y-2 mb-4"
+        >
+          <input type="hidden" name="project_id" value={project.id} />
+          <input
+            type="file"
+            name="file"
+            accept=".pdf,.png,.jpg,.jpeg"
+            required
+            className="text-sm"
+          />
+          <textarea
+            name="instruction"
+            rows={2}
+            placeholder="Ex: décris ce graphique / extrait les valeurs du tableau / résume ce résultat..."
+            required
+          />
+          <button type="submit" className="btn-primary">
+            Analyser
+          </button>
+        </form>
+
+        <div className="space-y-2">
+          {analyses.map(
+            (a: {
+              id: string;
+              filename: string;
+              storage_path: string;
+              instruction: string;
+              result: string | null;
+            }) => (
+              <div key={a.id} className="idea-card">
+                <div className="flex justify-between items-center mb-1">
+                  <span className="text-sm font-medium">{a.filename}</span>
+                  <form action={deleteFileAnalysisAction}>
+                    <input type="hidden" name="id" value={a.id} />
+                    <input type="hidden" name="storage_path" value={a.storage_path} />
+                    <button type="submit" className="text-xs btn-danger">
+                      Supprimer
+                    </button>
+                  </form>
+                </div>
+                <p className="text-xs mb-1" style={{ color: "var(--ink-soft)" }}>
+                  Instruction : {a.instruction}
+                </p>
+                {a.result && (
+                  <p className="text-sm whitespace-pre-wrap mt-2 pt-2" style={{ borderTop: "1px dashed var(--line)" }}>
+                    {a.result}
+                  </p>
+                )}
+              </div>
+            )
+          )}
+
+          {analyses.length === 0 && (
+            <p className="text-sm" style={{ color: "var(--ink-soft)" }}>
+              Aucune analyse pour l&apos;instant.
             </p>
           )}
         </div>

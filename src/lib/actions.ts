@@ -15,6 +15,8 @@ import {
   ROADMAP_UPDATE_SYSTEM_PROMPT,
   DAILY_INSTRUCTIONS,
   dailySystemPrompt,
+  IDEA_GROUP_SYSTEM_PROMPT,
+  FILE_ANALYSIS_SYSTEM_PROMPT,
 } from "@/lib/prompts";
 
 // ---- Projet & Modèle ----
@@ -359,30 +361,14 @@ async function extractText(
   fileType: string
 ): Promise<string | null> {
   if (fileType === "application/pdf") {
-    // Loaded on demand: pdf-parse pulls in a native binary dependency, so
-    // keeping this out of the top-level imports keeps every other page
-    // (which never touches PDFs) from paying that cost or risk.
-    const [{ PDFParse }, path, { pathToFileURL }] = await Promise.all([
-      import("pdf-parse"),
-      import("node:path"),
-      import("node:url"),
-    ]);
-
-    // Next.js' bundler breaks pdfjs-dist's own worker path resolution at
-    // runtime, so point it at the real file on disk instead of letting it guess.
-    PDFParse.setWorker(
-      pathToFileURL(
-        path.join(process.cwd(), "node_modules/pdf-parse/dist/worker/pdf.worker.mjs")
-      ).href
-    );
-
-    const parser = new PDFParse({ data: buffer });
-    try {
-      const result = await parser.getText();
-      return result.text;
-    } finally {
-      await parser.destroy();
-    }
+    // Loaded on demand: keeps every other page (which never touches PDFs)
+    // from paying the import cost. unpdf ships its own serverless build of
+    // pdf.js with zero native dependencies, unlike pdf-parse (which needs
+    // browser Canvas APIs such as DOMMatrix that don't exist on Vercel).
+    const { extractText: extractPdfText, getDocumentProxy } = await import("unpdf");
+    const pdf = await getDocumentProxy(new Uint8Array(buffer));
+    const { text } = await extractPdfText(pdf, { mergePages: true });
+    return text;
   }
 
   if (
@@ -449,6 +435,90 @@ export async function deleteUploadAction(formData: FormData) {
   await supabaseAdmin.storage.from("uploads").remove([storagePath]);
 
   const { error } = await supabaseAdmin.from("uploads").delete().eq("id", id);
+  if (error) throw new Error(error.message);
+  revalidatePath("/projet");
+}
+
+// ---- File analysis (upload a graph/table/image + free-form instruction) ----
+
+export async function listFileAnalyses(projectId: string) {
+  const { data, error } = await supabaseAdmin
+    .from("file_analyses")
+    .select("*")
+    .eq("project_id", projectId)
+    .order("created_at", { ascending: false });
+
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+export async function analyzeFileAction(formData: FormData) {
+  const projectId = formData.get("project_id") as string;
+  const file = formData.get("file") as File | null;
+  const instruction = (formData.get("instruction") as string)?.trim();
+  if (!file || file.size === 0 || !instruction) return;
+
+  const supportedTypes = ["application/pdf", "image/png", "image/jpeg"];
+  if (!supportedTypes.includes(file.type)) return;
+
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const storagePath = `${projectId}/analysis/${Date.now()}-${file.name}`;
+
+  const { error: uploadError } = await supabaseAdmin.storage
+    .from("uploads")
+    .upload(storagePath, buffer, { contentType: file.type });
+  if (uploadError) throw new Error(uploadError.message);
+
+  const base64Data = buffer.toString("base64");
+  const contentBlock =
+    file.type === "application/pdf"
+      ? {
+          type: "document" as const,
+          source: {
+            type: "base64" as const,
+            media_type: "application/pdf" as const,
+            data: base64Data,
+          },
+        }
+      : {
+          type: "image" as const,
+          source: {
+            type: "base64" as const,
+            media_type: file.type as "image/png" | "image/jpeg",
+            data: base64Data,
+          },
+        };
+
+  const response = await anthropic.messages.create({
+    model: "claude-sonnet-5",
+    max_tokens: 1500,
+    system: FILE_ANALYSIS_SYSTEM_PROMPT,
+    messages: [
+      { role: "user", content: [contentBlock, { type: "text", text: instruction }] },
+    ],
+  });
+
+  const result = extractTextBlock(response.content);
+
+  const { error } = await supabaseAdmin.from("file_analyses").insert({
+    project_id: projectId,
+    filename: file.name,
+    storage_path: storagePath,
+    instruction,
+    result,
+  });
+
+  if (error) throw new Error(error.message);
+  revalidatePath("/projet");
+}
+
+export async function deleteFileAnalysisAction(formData: FormData) {
+  const id = formData.get("id") as string;
+  const storagePath = formData.get("storage_path") as string;
+
+  await supabaseAdmin.storage.from("uploads").remove([storagePath]);
+
+  const { error } = await supabaseAdmin.from("file_analyses").delete().eq("id", id);
   if (error) throw new Error(error.message);
   revalidatePath("/projet");
 }
@@ -893,6 +963,63 @@ export async function suggestChapterAction(formData: FormData) {
     .from("ideas")
     .update({ suggested_chapter_id: suggestedChapterId })
     .eq("id", id);
+
+  if (error) throw new Error(error.message);
+  revalidatePath("/idees");
+}
+
+// ---- Idea groups (organize several loose ideas before assigning them) ----
+
+export async function listIdeaGroups(projectId: string) {
+  const { data, error } = await supabaseAdmin
+    .from("idea_groups")
+    .select("*")
+    .eq("project_id", projectId)
+    .order("created_at", { ascending: false });
+
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+export async function sequenceIdeasAction(formData: FormData) {
+  const projectId = formData.get("project_id") as string;
+  const ideaIds = formData.getAll("idea_ids") as string[];
+  if (ideaIds.length < 2) return;
+
+  const { data: ideas } = await supabaseAdmin
+    .from("ideas")
+    .select("text")
+    .in("id", ideaIds);
+
+  const texts = (ideas ?? []).map((i: { text: string }) => i.text);
+  const ideasList = texts.map((t, i) => `${i + 1}. ${t}`).join("\n");
+  const fullContext = await buildFullContext();
+
+  const response = await anthropic.messages.create({
+    model: "claude-sonnet-5",
+    max_tokens: 2000,
+    system: IDEA_GROUP_SYSTEM_PROMPT,
+    messages: [
+      { role: "user", content: `${fullContext}\n\nIDEES A ORGANISER:\n${ideasList}` },
+    ],
+  });
+
+  const reasoning = parseJsonField(extractTextBlock(response.content), "sequence");
+
+  const { error } = await supabaseAdmin.from("idea_groups").insert({
+    project_id: projectId,
+    idea_texts: texts,
+    reasoning,
+  });
+
+  if (error) throw new Error(error.message);
+  revalidatePath("/idees");
+}
+
+export async function deleteIdeaGroupAction(formData: FormData) {
+  const id = formData.get("id") as string;
+
+  const { error } = await supabaseAdmin.from("idea_groups").delete().eq("id", id);
 
   if (error) throw new Error(error.message);
   revalidatePath("/idees");

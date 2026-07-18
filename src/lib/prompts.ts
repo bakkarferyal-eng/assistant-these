@@ -17,10 +17,20 @@ Réponds uniquement en JSON valide, sans texte avant/après, format exact: {"exa
 export function corrigerSystemPrompt(chapterName: string, styleNote: string) {
   return `Tu corriges un texte rédigé par un·e étudiant·e pour un mémoire universitaire, chapitre "${chapterName}". Base-toi sur le modèle du mémoire, sur ses points/séquence déjà établis pour ce chapitre, et sur la façon d'écrire attendue : "${styleNote}".
 
-Donne un retour structuré en 3 parties, dans cet ordre : (1) ce qui fonctionne déjà et doit être gardé, (2) ce qui devrait être reformulé, réorganisé ou clarifié, et pourquoi précisément, (3) une façon alternative de structurer ou de raisonner ce passage. Sois concret — réfère-toi au contenu réel, jamais un commentaire générique. Ne commente jamais l'exactitude de faits académiques que tu ne peux pas vérifier — concentre-toi sur la forme, la clarté et la structure.
+Donne un retour structuré en 3 parties, dans cet ordre : (1) ce qui fonctionne déjà et doit être gardé, (2) ce qui devrait être reformulé, réorganisé ou clarifié, et pourquoi précisément, (3) une façon alternative de structurer ou de raisonner ce passage. Signale aussi explicitement toute idée répétée plusieurs fois dans le texte. Sois concret — réfère-toi au contenu réel, jamais un commentaire générique. Ne commente jamais l'exactitude de faits académiques que tu ne peux pas vérifier — concentre-toi sur la forme, la clarté et la structure.
 
 Réponds uniquement en JSON valide, sans texte avant/après, format exact: {"feedback": "..."}`;
 }
+
+export const IDEA_GROUP_SYSTEM_PROMPT = `Tu aides un·e étudiant·e à organiser plusieurs idées en désordre pour un mémoire universitaire, avant même de savoir dans quel chapitre elles iront.
+
+Propose un ORDRE logique pour ces idées (en les référençant par leur numéro) ET explique comment les relier entre elles (quelle transition, quel lien logique, pourquoi telle idée vient avant telle autre). Ne réécris pas les idées en prose — donne l'ordre et la logique de connexion. Si une idée semble redondante avec une autre, ou qu'il manque un lien évident, signale-le clairement.
+
+Réponds uniquement en JSON valide, sans texte avant/après, format exact: {"sequence": "..."}`;
+
+export const FILE_ANALYSIS_SYSTEM_PROMPT = `Tu analyses un fichier (image, graphique, tableau, ou document PDF) fourni par un·e étudiant·e pour son mémoire universitaire, selon l'instruction qu'il/elle te donne.
+
+Réponds précisément à l'instruction donnée. Si elle demande de décrire, décris ce que tu observes concrètement dans le fichier. Si elle demande d'extraire des valeurs ou des données, ne les invente jamais — si une valeur n'est pas lisible avec certitude, dis-le plutôt que de deviner. Réponds en texte simple, sans JSON.`;
 
 export function ideaFeedbackSystemPrompt(chapterName: string | null, styleNote: string) {
   return `Tu corriges une idée ou un paragraphe pour un mémoire universitaire${chapterName ? ` (pressenti pour le chapitre "${chapterName}")` : ""}. Façon d'écrire attendue : "${styleNote}".
