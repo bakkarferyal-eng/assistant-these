@@ -1,9 +1,6 @@
 "use server";
 
-import path from "node:path";
-import { pathToFileURL } from "node:url";
 import { revalidatePath } from "next/cache";
-import { PDFParse } from "pdf-parse";
 import mammoth from "mammoth";
 import { supabaseAdmin } from "@/lib/supabase";
 import { anthropic } from "@/lib/anthropic";
@@ -19,14 +16,6 @@ import {
   DAILY_INSTRUCTIONS,
   dailySystemPrompt,
 } from "@/lib/prompts";
-
-// Next.js' bundler breaks pdfjs-dist's own worker path resolution at runtime,
-// so point it at the real file on disk instead of letting it guess.
-PDFParse.setWorker(
-  pathToFileURL(
-    path.join(process.cwd(), "node_modules/pdf-parse/dist/worker/pdf.worker.mjs")
-  ).href
-);
 
 // ---- Projet & Modèle ----
 
@@ -370,6 +359,23 @@ async function extractText(
   fileType: string
 ): Promise<string | null> {
   if (fileType === "application/pdf") {
+    // Loaded on demand: pdf-parse pulls in a native binary dependency, so
+    // keeping this out of the top-level imports keeps every other page
+    // (which never touches PDFs) from paying that cost or risk.
+    const [{ PDFParse }, path, { pathToFileURL }] = await Promise.all([
+      import("pdf-parse"),
+      import("node:path"),
+      import("node:url"),
+    ]);
+
+    // Next.js' bundler breaks pdfjs-dist's own worker path resolution at
+    // runtime, so point it at the real file on disk instead of letting it guess.
+    PDFParse.setWorker(
+      pathToFileURL(
+        path.join(process.cwd(), "node_modules/pdf-parse/dist/worker/pdf.worker.mjs")
+      ).href
+    );
+
     const parser = new PDFParse({ data: buffer });
     try {
       const result = await parser.getText();
