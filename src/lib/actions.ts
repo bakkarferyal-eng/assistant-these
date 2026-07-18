@@ -1280,11 +1280,39 @@ export async function createJournalAction(formData: FormData) {
   const text = (formData.get("text") as string)?.trim();
   if (!text) return;
 
-  const { error } = await supabaseAdmin
-    .from("journal")
-    .insert({ project_id: projectId, text });
+  const today = new Date().toISOString().slice(0, 10);
+  const time = new Date().toLocaleTimeString("fr-FR", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  const entry = `${time} — ${text}`;
 
-  if (error) throw new Error(error.message);
+  // One case per day: append to today's entry if it already exists, rather
+  // than creating a new row every time. Most-recent-first in case older
+  // data has duplicate same-day rows from before this behavior existed.
+  const { data: existingRows } = await supabaseAdmin
+    .from("journal")
+    .select("id, text")
+    .eq("project_id", projectId)
+    .eq("date", today)
+    .order("created_at", { ascending: false })
+    .limit(1);
+
+  const existing = existingRows?.[0];
+
+  if (existing) {
+    const { error } = await supabaseAdmin
+      .from("journal")
+      .update({ text: `${existing.text}\n\n${entry}` })
+      .eq("id", existing.id);
+    if (error) throw new Error(error.message);
+  } else {
+    const { error } = await supabaseAdmin
+      .from("journal")
+      .insert({ project_id: projectId, date: today, text: entry });
+    if (error) throw new Error(error.message);
+  }
+
   revalidatePath("/journal");
 }
 

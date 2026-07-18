@@ -23,8 +23,10 @@ export default async function JournalPage() {
       <div className="card p-4">
         <p className="text-xs mb-2" style={{ color: "var(--ink-soft)" }}>
           Ce que tu as fait aujourd&apos;hui, où tu as été bloqué·e, ce que tu
-          as compris — pas besoin que ce soit propre. Les dernières entrées
-          sont lues par les fonctionnalités IA.
+          as compris — pas besoin que ce soit propre. Une seule case par jour
+          : si tu écris plusieurs fois le même jour, ça s&apos;ajoute à la
+          suite plutôt que de créer une nouvelle entrée. Les dernières
+          entrées sont lues par les fonctionnalités IA.
         </p>
         <form action={createJournalAction} className="space-y-2">
           <input type="hidden" name="project_id" value={project.id} />
