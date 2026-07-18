@@ -10,6 +10,7 @@ import {
   corrigerSystemPrompt,
   ideaFeedbackSystemPrompt,
   REFERENCE_SYSTEM_PROMPT,
+  REFERENCE_EXTRACTION_SYSTEM_PROMPT,
   CHAPTER_GUIDE_SYSTEM_PROMPT,
   chapterSuggestionSystemPrompt,
   ROADMAP_UPDATE_SYSTEM_PROMPT,
@@ -498,7 +499,12 @@ export async function uploadFileAction(formData: FormData) {
     if (error) throw new Error(error.message);
   }
 
+  if (extractedText) {
+    await extractReferencesFromText(projectId, extractedText);
+  }
+
   revalidatePath("/projet");
+  revalidatePath("/references");
 }
 
 export async function deleteUploadAction(formData: FormData) {
@@ -1168,16 +1174,54 @@ export async function listReferences(projectId: string) {
   return data;
 }
 
+async function insertFormattedReference(projectId: string, raw: string) {
+  const response = await anthropic.messages.create({
+    model: "claude-sonnet-5",
+    max_tokens: 500,
+    system: REFERENCE_SYSTEM_PROMPT,
+    messages: [{ role: "user", content: raw }],
+  });
+
+  const formatted = extractTextBlock(response.content);
+
+  const { error } = await supabaseAdmin
+    .from("references")
+    .insert({ project_id: projectId, raw, formatted });
+  if (error) throw new Error(error.message);
+}
+
+// Best-effort: scans extracted document text for real bibliographic
+// references and adds each one (pre-formatted), skipped silently on any
+// failure so it never blocks the upload itself.
+async function extractReferencesFromText(projectId: string, text: string) {
+  try {
+    const response = await anthropic.messages.create({
+      model: "claude-sonnet-5",
+      max_tokens: 1500,
+      system: REFERENCE_EXTRACTION_SYSTEM_PROMPT,
+      messages: [{ role: "user", content: text.slice(0, 100000) }],
+    });
+
+    const raw = extractTextBlock(response.content)
+      .replace(/```json|```/g, "")
+      .trim();
+    const parsed = JSON.parse(raw);
+    const refs: string[] = parsed.references ?? [];
+
+    for (const ref of refs.slice(0, 20)) {
+      if (ref?.trim()) await insertFormattedReference(projectId, ref.trim());
+    }
+  } catch {
+    // Extraction is a bonus, not a requirement — swallow and move on.
+  }
+}
+
 export async function createReferenceAction(formData: FormData) {
   const projectId = formData.get("project_id") as string;
   const raw = (formData.get("raw") as string)?.trim();
   if (!raw) return;
 
-  const { error } = await supabaseAdmin
-    .from("references")
-    .insert({ project_id: projectId, raw });
-
-  if (error) throw new Error(error.message);
+  await insertFormattedReference(projectId, raw);
   revalidatePath("/references");
 }
 

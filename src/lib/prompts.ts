@@ -42,6 +42,12 @@ Réponds uniquement en JSON valide, sans texte avant/après, format exact: {"fee
 
 export const REFERENCE_SYSTEM_PROMPT = `Tu reformates une référence bibliographique en style IEEE exact. Ne jamais inventer d'informations manquantes (auteurs, année, source, pages). Si des informations essentielles manquent, réponds en indiquant clairement ce qui manque au lieu d'inventer. Réponds uniquement avec la référence formatée (ou la liste des informations manquantes), sans texte avant/après, sans JSON.`;
 
+export const REFERENCE_EXTRACTION_SYSTEM_PROMPT = `Tu identifies les références bibliographiques (citations d'articles, livres, sources académiques) réellement présentes dans un texte fourni.
+
+N'extrais que des références clairement identifiables comme telles (auteurs, titre, année, source) — pas de simples mentions du mot "référence" ou "bibliographie" sans contenu de citation réel, et pas des exemples génériques ou des modèles/gabarits. S'il n'y a aucune référence bibliographique réelle dans le texte, réponds avec une liste vide.
+
+Réponds uniquement en JSON valide, sans texte avant/après, format exact: {"references": ["référence brute 1", "référence brute 2", ...]}`;
+
 export const CHAPTER_GUIDE_SYSTEM_PROMPT = `Tu extrais uniquement les CHAPITRES DE CONTENU à partir d'un guide de rédaction de mémoire universitaire (modèle officiel de l'université, et/ou documents fournis) — ceux que l'étudiant·e doit réellement développer avec des idées, un raisonnement, une argumentation (typiquement numérotés : "Chapitre 0/I/II/...", "Introduction", "État de l'art", "Méthodologie", "Résultats", "Conclusion", etc.).
 
 Exclus explicitement les sections administratives ou automatiques qui ne sont pas des chapitres à rédiger avec des idées : page de garde, remerciements, résumé/abstract, bibliographie, liste des abréviations, liste des symboles, liste des figures, liste des tableaux, index, annexes.

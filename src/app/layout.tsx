@@ -47,7 +47,7 @@ export default function RootLayout({
             className="hex-deco"
             style={{ width: 90, height: 90, top: 90, right: 150 }}
           />
-          <header className="mb-5 relative">
+          <header className="mb-5 relative flex items-center justify-between gap-3">
             <Link href="/">
               <h1
                 className="disp text-2xl font-semibold"
@@ -56,6 +56,9 @@ export default function RootLayout({
                 Assistant de Thèse
               </h1>
             </Link>
+            <a href="/api/export" className="btn-ghost text-sm shrink-0">
+              Exporter en .docx
+            </a>
           </header>
           <nav className="mb-6">
             <NavTabs />
