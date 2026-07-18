@@ -6,17 +6,37 @@ import {
   listUploads,
   uploadFileAction,
   deleteUploadAction,
-  listFileAnalyses,
-  analyzeFileAction,
+  analyzeUploadAction,
   deleteFileAnalysisAction,
 } from "@/lib/actions";
+
+type FileAnalysis = {
+  id: string;
+  instruction: string;
+  result: string | null;
+};
+
+type Upload = {
+  id: string;
+  filename: string;
+  file_type: string;
+  extracted_text: string | null;
+  storage_path: string;
+  file_analyses: FileAnalysis[];
+};
+
+const ANALYZABLE_TYPES = [
+  "application/pdf",
+  "image/png",
+  "image/jpeg",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+];
 
 export const dynamic = "force-dynamic";
 
 export default async function ProjetPage() {
   const project = await getOrCreateProject();
-  const uploads = await listUploads(project.id);
-  const analyses = await listFileAnalyses(project.id);
+  const uploads: Upload[] = await listUploads(project.id);
 
   return (
     <div className="space-y-4">
@@ -146,12 +166,19 @@ export default async function ProjetPage() {
       </form>
 
       <div className="card p-4">
-        <h2 className="disp text-lg font-medium mb-3">Documents</h2>
+        <h2 className="disp text-lg font-medium mb-1">Documents</h2>
+        <p className="text-xs mb-3" style={{ color: "var(--ink-soft)" }}>
+          PDF, DOCX ou image. Le texte est extrait automatiquement. Ajoute une
+          instruction si tu veux en plus une analyse IA (décrire un
+          graphique, extraire des valeurs d&apos;un tableau, répondre à une
+          question dessus...) — sinon laisse-la vide, le fichier est juste
+          stocké avec son texte.
+        </p>
 
         <form
           action={uploadFileAction}
           encType="multipart/form-data"
-          className="flex gap-2 mb-4"
+          className="space-y-2 mb-4"
         >
           <input type="hidden" name="project_id" value={project.id} />
           <input
@@ -159,7 +186,12 @@ export default async function ProjetPage() {
             name="file"
             accept=".pdf,.docx,.png,.jpg,.jpeg"
             required
-            className="flex-1 text-sm"
+            className="text-sm"
+          />
+          <textarea
+            name="instruction"
+            rows={2}
+            placeholder="Instruction pour l'IA (optionnel) — ex: décris ce graphique..."
           />
           <button type="submit" className="btn-primary shrink-0">
             Envoyer
@@ -193,85 +225,59 @@ export default async function ProjetPage() {
                   Pas de texte extrait (image, ou extraction impossible).
                 </p>
               )}
+
+              {upload.file_analyses.length > 0 && (
+                <div className="mt-2 space-y-2">
+                  {upload.file_analyses.map((a) => (
+                    <div
+                      key={a.id}
+                      className="pt-2"
+                      style={{ borderTop: "1px dashed var(--line)" }}
+                    >
+                      <div className="flex justify-between items-start gap-2">
+                        <p className="text-xs" style={{ color: "var(--ink-soft)" }}>
+                          Instruction : {a.instruction}
+                        </p>
+                        <form action={deleteFileAnalysisAction}>
+                          <input type="hidden" name="id" value={a.id} />
+                          <button type="submit" className="text-xs btn-danger shrink-0">
+                            Supprimer
+                          </button>
+                        </form>
+                      </div>
+                      {a.result && (
+                        <p className="text-sm whitespace-pre-wrap mt-1">{a.result}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {ANALYZABLE_TYPES.includes(upload.file_type) && (
+                <form
+                  action={analyzeUploadAction}
+                  className="flex gap-1 mt-2 pt-2"
+                  style={{ borderTop: "1px dashed var(--line)" }}
+                >
+                  <input type="hidden" name="upload_id" value={upload.id} />
+                  <input
+                    type="text"
+                    name="instruction"
+                    placeholder="Demander une analyse..."
+                    style={{ fontSize: 12, padding: "6px 8px" }}
+                    required
+                  />
+                  <button type="submit" className="btn-ghost px-2 py-1 text-xs shrink-0">
+                    Analyser
+                  </button>
+                </form>
+              )}
             </div>
           ))}
 
           {uploads.length === 0 && (
             <p className="text-sm" style={{ color: "var(--ink-soft)" }}>
               Aucun document pour l&apos;instant.
-            </p>
-          )}
-        </div>
-      </div>
-
-      <div className="card p-4">
-        <h2 className="disp text-lg font-medium mb-1">Analyser un fichier</h2>
-        <p className="text-xs mb-3" style={{ color: "var(--ink-soft)" }}>
-          Un graphique, un tableau, une image de résultat — envoie le fichier
-          et dis à l&apos;IA quoi en faire (le décrire, en extraire les
-          valeurs, répondre à une question dessus...). Le résultat s&apos;affiche
-          en dessous, à copier toi-même où tu veux (ex: dans un chapitre).
-        </p>
-
-        <form
-          action={analyzeFileAction}
-          encType="multipart/form-data"
-          className="space-y-2 mb-4"
-        >
-          <input type="hidden" name="project_id" value={project.id} />
-          <input
-            type="file"
-            name="file"
-            accept=".pdf,.png,.jpg,.jpeg"
-            required
-            className="text-sm"
-          />
-          <textarea
-            name="instruction"
-            rows={2}
-            placeholder="Ex: décris ce graphique / extrait les valeurs du tableau / résume ce résultat..."
-            required
-          />
-          <button type="submit" className="btn-primary">
-            Analyser
-          </button>
-        </form>
-
-        <div className="space-y-2">
-          {analyses.map(
-            (a: {
-              id: string;
-              filename: string;
-              storage_path: string;
-              instruction: string;
-              result: string | null;
-            }) => (
-              <div key={a.id} className="idea-card">
-                <div className="flex justify-between items-center mb-1">
-                  <span className="text-sm font-medium">{a.filename}</span>
-                  <form action={deleteFileAnalysisAction}>
-                    <input type="hidden" name="id" value={a.id} />
-                    <input type="hidden" name="storage_path" value={a.storage_path} />
-                    <button type="submit" className="text-xs btn-danger">
-                      Supprimer
-                    </button>
-                  </form>
-                </div>
-                <p className="text-xs mb-1" style={{ color: "var(--ink-soft)" }}>
-                  Instruction : {a.instruction}
-                </p>
-                {a.result && (
-                  <p className="text-sm whitespace-pre-wrap mt-2 pt-2" style={{ borderTop: "1px dashed var(--line)" }}>
-                    {a.result}
-                  </p>
-                )}
-              </div>
-            )
-          )}
-
-          {analyses.length === 0 && (
-            <p className="text-sm" style={{ color: "var(--ink-soft)" }}>
-              Aucune analyse pour l&apos;instant.
             </p>
           )}
         </div>

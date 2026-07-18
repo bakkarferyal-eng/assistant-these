@@ -386,7 +386,7 @@ async function extractText(
 export async function listUploads(projectId: string) {
   const { data, error } = await supabaseAdmin
     .from("uploads")
-    .select("*")
+    .select("*, file_analyses(*)")
     .eq("project_id", projectId)
     .order("created_at", { ascending: false });
 
@@ -394,9 +394,69 @@ export async function listUploads(projectId: string) {
   return data;
 }
 
+const ANALYZABLE_TYPES = [
+  "application/pdf",
+  "image/png",
+  "image/jpeg",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+];
+
+async function runFileAnalysis(
+  buffer: Buffer,
+  fileType: string,
+  extractedText: string | null,
+  instruction: string
+) {
+  let content;
+  if (fileType === "application/pdf") {
+    content = [
+      {
+        type: "document" as const,
+        source: {
+          type: "base64" as const,
+          media_type: "application/pdf" as const,
+          data: buffer.toString("base64"),
+        },
+      },
+      { type: "text" as const, text: instruction },
+    ];
+  } else if (fileType === "image/png" || fileType === "image/jpeg") {
+    content = [
+      {
+        type: "image" as const,
+        source: {
+          type: "base64" as const,
+          media_type: fileType as "image/png" | "image/jpeg",
+          data: buffer.toString("base64"),
+        },
+      },
+      { type: "text" as const, text: instruction },
+    ];
+  } else {
+    // DOCX and other text-extracted types: Claude can't take these as a
+    // binary block, so pass the already-extracted text as context instead.
+    content = [
+      {
+        type: "text" as const,
+        text: `DOCUMENT:\n${extractedText || "(aucun texte extrait)"}\n\nINSTRUCTION:\n${instruction}`,
+      },
+    ];
+  }
+
+  const response = await anthropic.messages.create({
+    model: "claude-sonnet-5",
+    max_tokens: 1500,
+    system: FILE_ANALYSIS_SYSTEM_PROMPT,
+    messages: [{ role: "user", content }],
+  });
+
+  return extractTextBlock(response.content);
+}
+
 export async function uploadFileAction(formData: FormData) {
   const projectId = formData.get("project_id") as string;
   const file = formData.get("file") as File | null;
+  const instruction = (formData.get("instruction") as string)?.trim();
   if (!file || file.size === 0) return;
 
   const buffer = Buffer.from(await file.arrayBuffer());
@@ -416,15 +476,28 @@ export async function uploadFileAction(formData: FormData) {
     extractedText = null;
   }
 
-  const { error: insertError } = await supabaseAdmin.from("uploads").insert({
-    project_id: projectId,
-    filename: file.name,
-    file_type: file.type,
-    extracted_text: extractedText,
-    storage_path: storagePath,
-  });
+  const { data: uploadRow, error: insertError } = await supabaseAdmin
+    .from("uploads")
+    .insert({
+      project_id: projectId,
+      filename: file.name,
+      file_type: file.type,
+      extracted_text: extractedText,
+      storage_path: storagePath,
+    })
+    .select()
+    .single();
 
   if (insertError) throw new Error(insertError.message);
+
+  if (instruction && ANALYZABLE_TYPES.includes(file.type)) {
+    const result = await runFileAnalysis(buffer, file.type, extractedText, instruction);
+    const { error } = await supabaseAdmin
+      .from("file_analyses")
+      .insert({ project_id: projectId, upload_id: uploadRow.id, instruction, result });
+    if (error) throw new Error(error.message);
+  }
+
   revalidatePath("/projet");
 }
 
@@ -439,74 +512,37 @@ export async function deleteUploadAction(formData: FormData) {
   revalidatePath("/projet");
 }
 
-// ---- File analysis (upload a graph/table/image + free-form instruction) ----
-
-export async function listFileAnalyses(projectId: string) {
-  const { data, error } = await supabaseAdmin
-    .from("file_analyses")
-    .select("*")
-    .eq("project_id", projectId)
-    .order("created_at", { ascending: false });
-
-  if (error) throw new Error(error.message);
-  return data;
-}
-
-export async function analyzeFileAction(formData: FormData) {
-  const projectId = formData.get("project_id") as string;
-  const file = formData.get("file") as File | null;
+export async function analyzeUploadAction(formData: FormData) {
+  const uploadId = formData.get("upload_id") as string;
   const instruction = (formData.get("instruction") as string)?.trim();
-  if (!file || file.size === 0 || !instruction) return;
+  if (!instruction) return;
 
-  const supportedTypes = ["application/pdf", "image/png", "image/jpeg"];
-  if (!supportedTypes.includes(file.type)) return;
-
-  const buffer = Buffer.from(await file.arrayBuffer());
-  const storagePath = `${projectId}/analysis/${Date.now()}-${file.name}`;
-
-  const { error: uploadError } = await supabaseAdmin.storage
+  const { data: upload, error: fetchError } = await supabaseAdmin
     .from("uploads")
-    .upload(storagePath, buffer, { contentType: file.type });
-  if (uploadError) throw new Error(uploadError.message);
+    .select("*")
+    .eq("id", uploadId)
+    .single();
+  if (fetchError) throw new Error(fetchError.message);
+  if (!ANALYZABLE_TYPES.includes(upload.file_type)) return;
 
-  const base64Data = buffer.toString("base64");
-  const contentBlock =
-    file.type === "application/pdf"
-      ? {
-          type: "document" as const,
-          source: {
-            type: "base64" as const,
-            media_type: "application/pdf" as const,
-            data: base64Data,
-          },
-        }
-      : {
-          type: "image" as const,
-          source: {
-            type: "base64" as const,
-            media_type: file.type as "image/png" | "image/jpeg",
-            data: base64Data,
-          },
-        };
+  const { data: fileData, error: downloadError } = await supabaseAdmin.storage
+    .from("uploads")
+    .download(upload.storage_path);
+  if (downloadError || !fileData) {
+    throw new Error(downloadError?.message ?? "download failed");
+  }
+  const buffer = Buffer.from(await fileData.arrayBuffer());
 
-  const response = await anthropic.messages.create({
-    model: "claude-sonnet-5",
-    max_tokens: 1500,
-    system: FILE_ANALYSIS_SYSTEM_PROMPT,
-    messages: [
-      { role: "user", content: [contentBlock, { type: "text", text: instruction }] },
-    ],
-  });
+  const result = await runFileAnalysis(
+    buffer,
+    upload.file_type,
+    upload.extracted_text,
+    instruction
+  );
 
-  const result = extractTextBlock(response.content);
-
-  const { error } = await supabaseAdmin.from("file_analyses").insert({
-    project_id: projectId,
-    filename: file.name,
-    storage_path: storagePath,
-    instruction,
-    result,
-  });
+  const { error } = await supabaseAdmin
+    .from("file_analyses")
+    .insert({ project_id: upload.project_id, upload_id: uploadId, instruction, result });
 
   if (error) throw new Error(error.message);
   revalidatePath("/projet");
@@ -514,9 +550,6 @@ export async function analyzeFileAction(formData: FormData) {
 
 export async function deleteFileAnalysisAction(formData: FormData) {
   const id = formData.get("id") as string;
-  const storagePath = formData.get("storage_path") as string;
-
-  await supabaseAdmin.storage.from("uploads").remove([storagePath]);
 
   const { error } = await supabaseAdmin.from("file_analyses").delete().eq("id", id);
   if (error) throw new Error(error.message);
