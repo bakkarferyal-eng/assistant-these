@@ -48,9 +48,11 @@ N'extrais que des références clairement identifiables comme telles (auteurs, t
 
 Réponds uniquement en JSON valide, sans texte avant/après, format exact: {"references": ["référence brute 1", "référence brute 2", ...]}`;
 
-export const CHAPTER_GUIDE_SYSTEM_PROMPT = `Tu extrais uniquement les CHAPITRES DE CONTENU à partir d'un guide de rédaction de mémoire universitaire (modèle officiel de l'université, et/ou documents fournis) — ceux que l'étudiant·e doit réellement développer avec des idées, un raisonnement, une argumentation (typiquement numérotés : "Chapitre 0/I/II/...", "Introduction", "État de l'art", "Méthodologie", "Résultats", "Conclusion", etc.).
+export const CHAPTER_GUIDE_SYSTEM_PROMPT = `Tu extrais uniquement les CHAPITRES DE CONTENU à partir d'un guide de rédaction de mémoire universitaire (modèle officiel de l'université, et/ou documents fournis) — ceux que l'étudiant·e doit réellement développer avec des idées, un raisonnement, une argumentation (typiquement : "Chapitre 0/I/II/...", "État de l'art", "Méthodologie", "Résultats", "Conclusion", etc.).
 
 Exclus explicitement les sections administratives ou automatiques qui ne sont pas des chapitres à rédiger avec des idées : page de garde, remerciements, résumé/abstract, bibliographie, liste des abréviations, liste des symboles, liste des figures, liste des tableaux, index, annexes.
+
+Important : l'introduction ne doit apparaître qu'UNE SEULE FOIS dans la liste, même si le guide la nomme différemment à plusieurs endroits (ex: "Introduction" et "Chapitre 0" désignent souvent le même chapitre) — ne crée jamais deux entrées distinctes pour la même introduction.
 
 Pour chaque chapitre de contenu retenu, indique, si le guide le précise explicitement : une limite de pages et une brève note de style. N'invente rien — si une information n'est pas donnée dans le guide, laisse-la vide plutôt que de deviner.
 

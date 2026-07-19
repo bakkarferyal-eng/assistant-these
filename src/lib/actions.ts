@@ -233,19 +233,33 @@ export async function generateChaptersFromGuideAction(formData: FormData) {
     .order("position", { ascending: false });
 
   let nextPosition = (existing?.[0]?.position ?? -1) + 1;
+
+  // Strips "Chapitre 0/I/II..." prefixes so "Introduction" and
+  // "Chapitre 0: Introduction" are recognized as the same chapter.
+  const normalize = (name: string) =>
+    name
+      .trim()
+      .toLowerCase()
+      .replace(/^chapitre\s+[0-9ivx]+\s*[:.\-–]?\s*/i, "");
+
   const existingNames = new Set(
-    (existing ?? []).map((c: { name: string }) => c.name.trim().toLowerCase())
+    (existing ?? []).map((c: { name: string }) => normalize(c.name))
   );
 
-  const toInsert = parsed.chapters
-    .filter((c) => c.name && !existingNames.has(c.name.trim().toLowerCase()))
-    .map((c) => ({
+  const toInsert = [];
+  for (const c of parsed.chapters) {
+    if (!c.name) continue;
+    const key = normalize(c.name);
+    if (existingNames.has(key)) continue;
+    existingNames.add(key);
+    toInsert.push({
       project_id: projectId,
       name: c.name.trim(),
       position: nextPosition++,
       page_limit: c.page_limit ?? null,
       style_note: c.style_note ?? null,
-    }));
+    });
+  }
 
   if (toInsert.length === 0) return;
 
